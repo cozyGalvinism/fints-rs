@@ -1072,12 +1072,13 @@ fn parse_response(data: &[u8], expected_msg_num: u16) -> Result<Response> {
     let mut all_segments = Vec::new();
     for seg in &outer_segments {
         if seg.segment_type() == "HNVSD" {
-            if let Some(binary) = seg.deg(1).get(0).as_bytes() {
-                match parser::parse_inner_segments(binary) {
-                    Ok(inner) => all_segments.extend(inner),
-                    Err(e) => warn!("Failed to parse HNVSD: {}", e),
-                }
-            }
+            let binary = seg.deg(1).get(0).as_bytes().ok_or_else(|| {
+                FinTSError::InvalidResponse("HNVSD segment without binary payload".into())
+            })?;
+            // Fixed message: never echo payload bytes (may contain account data).
+            let inner = parser::parse_inner_segments(binary)
+                .map_err(|_| FinTSError::InvalidResponse("HNVSD payload could not be parsed".into()))?;
+            all_segments.extend(inner);
         } else {
             all_segments.push(seg.clone());
         }
@@ -1094,6 +1095,36 @@ fn parse_response(data: &[u8], expected_msg_num: u16) -> Result<Response> {
     }
 
     Ok(Response { segments: all_segments, global_codes, segment_codes })
+}
+
+#[cfg(test)]
+mod parse_response_tests {
+    use super::*;
+
+    fn hnvsd(inner: &[u8]) -> Vec<u8> {
+        let mut v = format!("HNHBK:1:3+0+300+0+1'HNVSD:999:1+@{}@", inner.len()).into_bytes();
+        v.extend_from_slice(inner);
+        v.extend_from_slice(b"'HNHBS:3:1+1'");
+        v
+    }
+
+    #[test]
+    fn parses_inner_segments() {
+        let r = parse_response(&hnvsd(b"HIRMG:3:2+0010::ok'"), 1).unwrap();
+        assert_eq!(r.global_codes.len(), 1);
+    }
+
+    #[test]
+    fn unparseable_hnvsd_payload_is_error() {
+        let r = parse_response(&hnvsd(b"HIRMG:3:2+@99@x'"), 1);
+        assert!(matches!(r, Err(FinTSError::InvalidResponse(_))));
+    }
+
+    #[test]
+    fn hnvsd_without_binary_is_error() {
+        let r = parse_response(b"HNHBK:1:3+0+300+0+1'HNVSD:999:1+text'HNHBS:3:1+1'", 1);
+        assert!(matches!(r, Err(FinTSError::InvalidResponse(_))));
+    }
 }
 
 #[cfg(test)]
