@@ -306,7 +306,9 @@ pub struct TanChallenge {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Cached bank and user parameters discovered during sync/init.
-#[derive(Debug, Clone)]
+///
+/// Serde-serializable so a session can be resumed without `sync()`; contains no PIN.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BankParams {
     pub bpd_version: u16,
     pub upd_version: u16,
@@ -1092,4 +1094,53 @@ fn parse_response(data: &[u8], expected_msg_num: u16) -> Result<Response> {
     }
 
     Ok(Response { segments: all_segments, global_codes, segment_codes })
+}
+
+#[cfg(test)]
+mod bank_params_serde_tests {
+    use super::*;
+
+    #[test]
+    fn bank_params_json_round_trip() {
+        let mut p = BankParams::new();
+        p.bpd_version = 7;
+        p.upd_version = 3;
+        p.bpd_segments.push(RawSegment { degs: vec![DEG(vec![parser::DataElement::Text("HIBPA".into())])] });
+        p.tan_methods.push(TanMethod {
+            security_function: SecurityFunction::new("923"),
+            tan_process: TanProcess::TwoStep,
+            name: "pushTAN".into(),
+            needs_tan_medium: true,
+            decoupled_max_polls: 12,
+            wait_before_first_poll: 7,
+            wait_before_next_poll: 3,
+            is_decoupled: true,
+            hktan_version: 7,
+        });
+        p.selected_security_function = SecurityFunction::new("923");
+        p.selected_tan_medium = Some(TanMediumName::new("iPhone"));
+        p.operation_tan_required.insert(SegmentType::new("HKSAL"), false);
+        p.operation_tan_required.insert(SegmentType::new("HKCCS"), true);
+        p.allowed_security_functions = vec![SecurityFunction::new("923")];
+        p.preferred_security_function = Some(SecurityFunction::new("923"));
+
+        let json = serde_json::to_string(&p).unwrap();
+        let q: BankParams = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(q.bpd_version, 7);
+        assert_eq!(q.upd_version, 3);
+        assert_eq!(q.bpd_segments, p.bpd_segments);
+        assert_eq!(q.tan_methods.len(), 1);
+        assert_eq!(q.tan_methods[0].name, "pushTAN");
+        assert_eq!(q.selected_security_function, p.selected_security_function);
+        assert_eq!(q.selected_tan_medium, p.selected_tan_medium);
+        assert_eq!(q.operation_tan_required, p.operation_tan_required);
+        assert_eq!(q.allowed_security_functions, p.allowed_security_functions);
+        assert_eq!(q.preferred_security_function, p.preferred_security_function);
+        assert_eq!(q.decoupled_params(), (7, 3, 12));
+        assert_eq!(q.decoupled_params(), p.decoupled_params());
+        assert!(!q.needs_tan(&SegmentType::new("HKSAL")));
+        assert!(q.needs_tan(&SegmentType::new("HKCCS")));
+        assert!(q.needs_tan(&SegmentType::new("HKXXX")));
+    }
 }
