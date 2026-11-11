@@ -281,7 +281,11 @@ pub(crate) fn parse_hisal(seg: &RawSegment) -> Option<AccountBalance> {
     let date_str = bal_deg.get_str(3);
 
     let amount = Decimal::from_str(&amount_str).ok()?;
-    let final_amount = if dc_indicator == "D" { -amount } else { amount };
+    let final_amount = match dc_indicator.as_str() {
+        "C" => amount,
+        "D" => -amount,
+        _ => return None, // never guess the sign of money
+    };
 
     let date = if date_str.len() == 8 {
         NaiveDate::parse_from_str(&date_str, "%Y%m%d").ok()
@@ -303,10 +307,12 @@ pub(crate) fn parse_hisal(seg: &RawSegment) -> Option<AccountBalance> {
             let pdc = pend_deg.get_str(0);
             let pamt_str = pend_deg.get_str(1).replace(',', ".");
             let pdate_str = pend_deg.get_str(3);
-            let pamt = Decimal::from_str(&pamt_str)
-                .ok()
-                .map(|a| if pdc == "D" { -a } else { a });
-            let pdate = if pdate_str.len() == 8 {
+            let pamt = Decimal::from_str(&pamt_str).ok().and_then(|a| match pdc.as_str() {
+                "C" => Some(a),
+                "D" => Some(-a),
+                _ => None,
+            });
+            let pdate = if pamt.is_some() && pdate_str.len() == 8 {
                 NaiveDate::parse_from_str(&pdate_str, "%Y%m%d").ok()
             } else {
                 None
@@ -698,6 +704,18 @@ mod tests {
         assert_eq!(bad.date, None);
         let no_cur = parse_hisal(&parse_segment("HISAL:5:7:3+DE04:BY+Girokonto++C:12,34::20260315'")).unwrap();
         assert_eq!(no_cur.currency, None);
+    }
+
+    #[test]
+    fn test_parse_hisal_dc_indicator_strict() {
+        let hisal = |b: &str| parse_hisal(&parse_segment(&format!("HISAL:5:7:3+DE04:BY+Girokonto+EUR+{b}'")));
+        assert_eq!(hisal("C:12,34:EUR:20260315").unwrap().amount, Decimal::from_str("12.34").unwrap());
+        assert_eq!(hisal("D:12,34:EUR:20260315").unwrap().amount, Decimal::from_str("-12.34").unwrap());
+        assert!(hisal(":12,34:EUR:20260315").is_none());
+        assert!(hisal("X:12,34:EUR:20260315").is_none());
+        let pend = hisal("C:12,34:EUR:20260315+X:5,00:EUR:20260316").unwrap();
+        assert_eq!(pend.pending_amount, None);
+        assert_eq!(pend.pending_date, None);
     }
 
     // ── IBAN / BIC heuristics ──────────────────────────────────────────
