@@ -765,6 +765,16 @@ async fn poll_decoupled_tan(
 // Output Formatting
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Display-only fallbacks: the library no longer invents a missing balance
+// date/currency, but the CLI keeps showing today / EUR as before.
+fn shown_date(b: &AccountBalance) -> chrono::NaiveDate {
+    b.date.unwrap_or_else(|| chrono::Utc::now().date_naive())
+}
+
+fn shown_currency(b: &AccountBalance) -> &str {
+    b.currency.as_ref().map_or("EUR", |c| c.as_str())
+}
+
 fn print_balance_human(iban: &str, balance: &AccountBalance, account_name: Option<&str>) {
     let display = format_iban_display(iban);
     let acct_part = account_name
@@ -774,14 +784,14 @@ fn print_balance_human(iban: &str, balance: &AccountBalance, account_name: Optio
     println!(
         "Balance: {} {} (as of {})",
         format_amount(&balance.amount),
-        balance.currency,
-        balance.date
+        shown_currency(balance),
+        shown_date(balance)
     );
     if let Some(avail) = &balance.available {
-        println!("Available: {} {}", format_amount(avail), balance.currency);
+        println!("Available: {} {}", format_amount(avail), shown_currency(balance));
     }
     if let Some(credit) = &balance.credit_line {
-        println!("Credit line: {} {}", format_amount(credit), balance.currency);
+        println!("Credit line: {} {}", format_amount(credit), shown_currency(balance));
     }
 }
 
@@ -901,20 +911,20 @@ fn print_sync_result_human(result: &SyncResult) {
         if let Some(ref avail) = bal.available {
             println!(
                 "Balance: {} {} (available: {} {}; as of {})",
-                format_amount(&bal.amount), bal.currency,
-                format_amount(avail), bal.currency,
-                bal.date
+                format_amount(&bal.amount), shown_currency(bal),
+                format_amount(avail), shown_currency(bal),
+                shown_date(bal)
             );
         } else {
             println!(
                 "Balance: {} {} (as of {})",
                 format_amount(&bal.amount),
-                bal.currency,
-                bal.date
+                shown_currency(bal),
+                shown_date(bal)
             );
         }
         if let (Some(pending), Some(pdate)) = (&bal.pending_amount, bal.pending_date) {
-            println!("Pending: {} {} (as of {})", format_amount(pending), bal.currency, pdate);
+            println!("Pending: {} {} (as of {})", format_amount(pending), shown_currency(bal), pdate);
         }
     }
     if result.transactions.is_empty() && result.holdings.is_empty() {
@@ -1366,7 +1376,7 @@ async fn cmd_balance(cli: &Cli, balance_args: &BalanceArgs) -> Result<(), String
                 println!("date,amount,currency");
                 println!(
                     "{},{},{}",
-                    balance.date, balance.amount, balance.currency
+                    shown_date(balance), balance.amount, shown_currency(balance)
                 );
             }
         }

@@ -572,8 +572,10 @@ pub struct SepaAccount {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountBalance {
     pub amount: Decimal,
-    pub date: NaiveDate,
-    pub currency: Currency,
+    /// `None` when the bank sent no (or an unparseable) balance date.
+    pub date: Option<NaiveDate>,
+    /// `None` when the bank sent no currency.
+    pub currency: Option<Currency>,
     pub credit_line: Option<Decimal>,
     pub available: Option<Decimal>,
     /// Pending (vorgemerkter) balance amount, if provided by the bank.

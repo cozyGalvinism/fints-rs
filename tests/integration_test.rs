@@ -146,7 +146,7 @@ async fn test_init_no_tan_then_business_ops() {
     match result {
         BalanceResult::Success(balance) => {
             assert_eq!(balance.amount.to_string(), "1523.42");
-            assert_eq!(balance.currency.as_str(), "EUR");
+            assert_eq!(balance.currency.as_ref().unwrap().as_str(), "EUR");
         }
         BalanceResult::NeedTan(_) => panic!("Unexpected TAN requirement"),
         BalanceResult::Empty => panic!("No balance data"),

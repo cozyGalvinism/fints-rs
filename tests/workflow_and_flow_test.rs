@@ -167,8 +167,8 @@ fn sync_result_serde_roundtrip() {
         bic: Bic::new("COBADEFFXXX"),
         balance: Some(AccountBalance {
             amount: Decimal::from_str("1523.42").unwrap(),
-            date: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
-            currency: Currency::new("EUR"),
+            date: Some(NaiveDate::from_ymd_opt(2025, 1, 15).unwrap()),
+            currency: Some(Currency::new("EUR")),
             credit_line: None,
             available: None,
             pending_amount: None,
@@ -185,7 +185,7 @@ fn sync_result_serde_roundtrip() {
     assert_eq!(back.transactions.len(), 1);
     let bal = back.balance.unwrap();
     assert_eq!(bal.amount.to_string(), "1523.42");
-    assert_eq!(bal.currency.as_str(), "EUR");
+    assert_eq!(bal.currency.as_ref().unwrap().as_str(), "EUR");
 }
 
 #[test]
@@ -233,7 +233,7 @@ async fn flow_connect_then_confirm_and_fetch() {
 
     let balance = result.balance.expect("balance should be present");
     assert_eq!(balance.amount.to_string(), "1523.42");
-    assert_eq!(balance.currency.as_str(), "EUR");
+    assert_eq!(balance.currency.as_ref().unwrap().as_str(), "EUR");
 
     // Mock returns 2 MT940 pages with 3 transaction lines.
     assert_eq!(result.transactions.len(), 3, "expected 3 transactions, got {:?}", result.transactions);

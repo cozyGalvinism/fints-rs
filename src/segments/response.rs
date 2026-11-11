@@ -341,12 +341,8 @@ pub(crate) fn parse_hisal(seg: &RawSegment) -> Option<AccountBalance> {
 
     Some(AccountBalance {
         amount: final_amount,
-        date: date.unwrap_or_else(|| chrono::Utc::now().date_naive()),
-        currency: Currency::new(if final_currency.is_empty() {
-            "EUR"
-        } else {
-            &final_currency
-        }),
+        date,
+        currency: (!final_currency.is_empty()).then(|| Currency::new(&final_currency)),
         credit_line,
         available,
         pending_amount,
@@ -687,6 +683,21 @@ mod tests {
     fn parse_segment(s: &str) -> RawSegment {
         let segments = parser::parse_message(s.as_bytes()).unwrap();
         segments.into_iter().next().unwrap()
+    }
+
+    // ── HISAL date / currency are not defaulted ────────────────────────
+
+    #[test]
+    fn test_parse_hisal_date_and_currency() {
+        let ok = parse_hisal(&parse_segment("HISAL:5:7:3+DE04:BY+Girokonto+EUR+C:12,34:EUR:20260315'")).unwrap();
+        assert_eq!(ok.date, NaiveDate::from_ymd_opt(2026, 3, 15));
+        assert_eq!(ok.currency.as_ref().map(|c| c.as_str()), Some("EUR"));
+        let none_date = parse_hisal(&parse_segment("HISAL:5:7:3+DE04:BY+Girokonto+EUR+C:12,34:EUR'")).unwrap();
+        assert_eq!(none_date.date, None);
+        let bad = parse_hisal(&parse_segment("HISAL:5:7:3+DE04:BY+Girokonto+EUR+C:12,34:EUR:2026ab15'")).unwrap();
+        assert_eq!(bad.date, None);
+        let no_cur = parse_hisal(&parse_segment("HISAL:5:7:3+DE04:BY+Girokonto++C:12,34::20260315'")).unwrap();
+        assert_eq!(no_cur.currency, None);
     }
 
     // ── IBAN / BIC heuristics ──────────────────────────────────────────
