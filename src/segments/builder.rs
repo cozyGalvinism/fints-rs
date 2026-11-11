@@ -133,8 +133,8 @@ pub(crate) fn hnvsk(
         deg1(de_text(security_function)),
         // Security role: 1 = ISS (issuer)
         deg1(de_text("1")),
-        // Security identification: role=2(MS), cid=empty, identifier=system_id
-        deg(vec![de_text("2"), de_empty(), de_text(system_id)]),
+        // Security identification: party=1 (MS, message sender), cid=empty, identifier=system_id
+        deg(vec![de_text("1"), de_empty(), de_text(system_id)]),
         // Security timestamp: type=1 (STS), date (YYYYMMDD), time (HHMMSS)
         {
             let now = Local::now();
@@ -201,8 +201,8 @@ pub(crate) fn hnshk(
         deg1(de_text("1")),
         // Security role: 1 = ISS
         deg1(de_text("1")),
-        // Security identification: role=2(MS), cid=empty, identifier=system_id
-        deg(vec![de_text("2"), de_empty(), de_text(system_id)]),
+        // Security identification: party=1 (MS, message sender), cid=empty, identifier=system_id
+        deg(vec![de_text("1"), de_empty(), de_text(system_id)]),
         // Security reference number: 1
         deg1(de_text("1")),
         // Security timestamp: type=1 (STS), date (YYYYMMDD), time (HHMMSS)
@@ -699,6 +699,25 @@ mod tests {
         assert_eq!(
             wire,
             "HKWPD:3:7+DE04120300001084174299:BYLADEM1001++++TOUCH123'"
+        );
+    }
+
+    // Customer -> bank messages identify the security party as 1 (message sender);
+    // 2 (message receiver) is only valid in bank responses.
+    #[test]
+    fn hnvsk_security_identification_is_message_sender() {
+        let bytes = serialize_segment(&hnvsk("12345678", "user", "0", "999")).unwrap();
+        let wire = String::from_utf8_lossy(&bytes);
+        assert!(wire.starts_with("HNVSK:998:3+PIN:1+999+1+1::0+"), "{wire}");
+    }
+
+    #[test]
+    fn hnshk_security_identification_is_message_sender() {
+        let bytes = serialize_segment(&hnshk(2, "999", 4711, "12345678", "user", "0")).unwrap();
+        let wire = String::from_utf8_lossy(&bytes);
+        assert!(
+            wire.starts_with("HNSHK:2:4+PIN:1+999+4711+1+1+1::0+1+"),
+            "{wire}"
         );
     }
 
